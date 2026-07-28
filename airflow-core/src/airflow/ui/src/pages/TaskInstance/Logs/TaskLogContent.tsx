@@ -17,7 +17,8 @@
  * under the License.
  */
 import { Box, Code, VStack } from "@chakra-ui/react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
+import type { Range as VirtualizerRange } from "@tanstack/react-virtual";
 import { useLayoutEffect, useRef, useCallback, useEffect } from "react";
 
 import { ErrorAlert } from "src/components/ErrorAlert";
@@ -28,6 +29,7 @@ import type { ParsedLogEntry } from "src/queries/useLogs";
 
 import { HighlightedText } from "./HighlightedText";
 import { ScrollToButton } from "./ScrollToButton";
+import { getDragClampTarget, getSelectionPinnedRows, mergePinnedIndexes } from "./logSelection";
 import { useLogGroups } from "./useLogGroups";
 import { getHighlightColor, isSelectionWithin, scrollToBottom, scrollToTop } from "./utils";
 
@@ -75,12 +77,25 @@ export const TaskLogContent = ({
 
   const isAtBottomRef = useRef<boolean>(true);
   const prevVisibleCountRef = useRef<number>(0);
+  const pinnedRowsRef = useRef<Array<number>>([]);
+  const isSelectingRef = useRef<boolean>(false);
+  // NaN disables clamping until the first pointermove reports a real position.
+  const lastPointerYRef = useRef<number>(Number.NaN);
+  const followDragRafRef = useRef<number>(0);
+
+  // TanStack keys its internal memo on this callback's identity — keep it stable.
+  const rangeExtractor = useCallback(
+    (range: VirtualizerRange) =>
+      mergePinnedIndexes(defaultRangeExtractor(range), pinnedRowsRef.current, range.count),
+    [],
+  );
 
   const rowVirtualizer = useVirtualizer({
     count: visibleItems.length,
     estimateSize: () => 20,
     getScrollElement: () => parentRef.current,
     overscan: 10,
+    rangeExtractor,
   });
 
   const contentHeight = rowVirtualizer.getTotalSize();
@@ -103,6 +118,87 @@ export const TaskLogContent = ({
 
     return () => el?.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
+
+  useEffect(() => {
+    const container = parentRef.current;
+    const handleSelectionChange = () => {
+      if (!container) {
+        return;
+      }
+      const selection = document.getSelection();
+
+      if (isSelectingRef.current && selection) {
+        const clampTarget = getDragClampTarget({
+          container,
+          pointerY: lastPointerYRef.current,
+          selection,
+        });
+
+        if (clampTarget) {
+          selection.extend(clampTarget.node, clampTarget.offset);
+
+          return;
+        }
+      }
+      pinnedRowsRef.current = getSelectionPinnedRows(selection, container);
+    };
+    // Chrome's own extension stalls or collapses over the unmounted spacer
+    // during autoscroll, so the drag follows the mounted edge every frame.
+    const followDrag = () => {
+      if (!isSelectingRef.current) {
+        return;
+      }
+      const selection = document.getSelection();
+
+      if (container && selection) {
+        const clampTarget = getDragClampTarget({
+          container,
+          pointerY: lastPointerYRef.current,
+          selection,
+        });
+
+        if (clampTarget) {
+          selection.extend(clampTarget.node, clampTarget.offset);
+        }
+      }
+      followDragRafRef.current = requestAnimationFrame(followDrag);
+    };
+    const handlePointerDown = () => {
+      isSelectingRef.current = true;
+      document.body.style.userSelect = "none";
+      document.body.style.webkitUserSelect = "none";
+      cancelAnimationFrame(followDragRafRef.current);
+      followDragRafRef.current = requestAnimationFrame(followDrag);
+    };
+    const handlePointerUp = () => {
+      isSelectingRef.current = false;
+      cancelAnimationFrame(followDragRafRef.current);
+      document.body.style.userSelect = "";
+      document.body.style.webkitUserSelect = "";
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      lastPointerYRef.current = event.clientY;
+    };
+
+    container?.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("selectionchange", handleSelectionChange);
+    document.addEventListener("pointermove", handlePointerMove, { passive: true });
+    document.addEventListener("pointerup", handlePointerUp);
+    document.addEventListener("pointercancel", handlePointerUp);
+    globalThis.addEventListener("blur", handlePointerUp);
+
+    return () => {
+      document.removeEventListener("selectionchange", handleSelectionChange);
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
+      document.removeEventListener("pointercancel", handlePointerUp);
+      globalThis.removeEventListener("blur", handlePointerUp);
+      container?.removeEventListener("pointerdown", handlePointerDown);
+      cancelAnimationFrame(followDragRafRef.current);
+      document.body.style.userSelect = "";
+      document.body.style.webkitUserSelect = "";
+    };
+  }, []);
 
   useLayoutEffect(() => {
     if (visibleItems.length === 0) {
@@ -167,6 +263,7 @@ export const TaskLogContent = ({
     <Box display="flex" flexDirection="column" flexGrow={1} h="100%" minHeight={0} position="relative">
       <ErrorAlert error={error ?? logError} />
       <ProgressBar size="xs" visibility={isLoading ? "visible" : "hidden"} />
+      {/* Non-row areas are unselectable so drag hit-testing skips them; rows opt back in. */}
       <Box
         data-testid="virtual-scroll-container"
         flexGrow={1}
@@ -175,6 +272,7 @@ export const TaskLogContent = ({
         position="relative"
         py={3}
         ref={parentRef}
+        userSelect="none"
         width="100%"
       >
         <Code
@@ -226,6 +324,7 @@ export const TaskLogContent = ({
                     ref={rowVirtualizer.measureElement}
                     top={0}
                     transform={`translateY(${virtualRow.start}px)`}
+                    userSelect="text"
                     width={wrap ? "100%" : "max-content"}
                   >
                     <Box
@@ -273,6 +372,7 @@ export const TaskLogContent = ({
                   ref={rowVirtualizer.measureElement}
                   top={0}
                   transform={`translateY(${virtualRow.start}px)`}
+                  userSelect="text"
                   width={wrap ? "100%" : "max-content"}
                 >
                   {visibleSearchMatchIndices?.has(virtualRow.index) ? (
