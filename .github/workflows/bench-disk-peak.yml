@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arm: [k8s, ci-image-build]
+        arm: [k8s]
     env:
       PYTHON_MAJOR_MINOR_VERSION: "3.10"
       KUBERNETES_VERSION: "v1.30.13"
@@ -70,18 +70,17 @@ jobs:
         uses: ./.github/actions/breeze
         id: breeze
 
-      - name: "Build the image this arm needs"
+      # Production downloads a prebuilt PROD image rather than building one, so pull
+      # apache's published image instead of rebuilding it here. Breeze derives image
+      # names from GITHUB_REPOSITORY, hence the override on both steps.
+      - name: "Pull the published PROD image"
         env:
-          ARM: ${{ matrix.arm }}
-        run: |
-          if [[ "${ARM}" == "k8s" ]]; then
-            breeze prod-image build --python "${PYTHON_MAJOR_MINOR_VERSION}"
-          else
-            breeze ci-image build --python "${PYTHON_MAJOR_MINOR_VERSION}"
-          fi
+          GITHUB_REPOSITORY: apache/airflow
+        run: docker pull "ghcr.io/apache/airflow/main/prod/python${PYTHON_MAJOR_MINOR_VERSION}:latest"
 
       - name: "Run complete K8S tests"
-        if: matrix.arm == 'k8s'
+        env:
+          GITHUB_REPOSITORY: apache/airflow
         run: breeze k8s run-complete-tests --upgrade --no-copy-local-sources
 
       - name: "Report the disk trajectory"
