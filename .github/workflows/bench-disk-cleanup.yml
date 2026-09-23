@@ -1,0 +1,116 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+# THROWAWAY BENCHMARK - not for upstream. Answers two questions about
+# scripts/tools/free_up_disk_space.sh, which every CI job runs before it can
+# use the CI image:
+#
+#   1. Can the cleanup be hidden behind the image download instead of blocking it?
+#   2. How much disk does a job actually consume, i.e. is the cleanup needed at all?
+#
+# Payload is the real CI image from ghcr (2.63 GiB compressed, 26 layers).
+---
+name: "bench: disk cleanup"
+on:  # yamllint disable-line rule:truthy
+  push:
+    branches:
+      - bench/disk-cleanup-overlap
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bench:
+    name: "${{ matrix.arm }} #${{ matrix.rep }}"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [sync, overlap, skip]
+        rep: [1, 2, 3]
+    env:
+      IMAGE: ghcr.io/apache/airflow/main/ci/python3.10:latest
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Run ${{ matrix.arm }}"
+        env:
+          ARM: ${{ matrix.arm }}
+          REP: ${{ matrix.rep }}
+        run: |
+          set -uo pipefail
+          ms() { date +%s%3N; }
+          avail() { df --output=avail -B1 / | tail -1 | tr -d ' '; }
+          gb() { awk -v b="$1" 'BEGIN{printf "%.1f", b/1073741824}'; }
+          secs() { awk -v m="$1" 'BEGIN{printf "%.1f", m/1000}'; }
+
+          # Sample available bytes on / once a second; the low-water mark is the
+          # real peak footprint of acquiring the image.
+          ( while :; do avail; sleep 1; done ) > /tmp/avail.log &
+          SAMPLER=$!
+          trap 'kill ${SAMPLER} 2>/dev/null || true' EXIT
+
+          START=$(ms)
+          BEFORE=$(avail)
+          CLEAN_MS=0
+          EXPOSED_MS=0
+
+          case "${ARM}" in
+            sync)
+              T=$(ms)
+              ./scripts/tools/free_up_disk_space.sh > /tmp/clean.log 2>&1
+              CLEAN_MS=$(( $(ms) - T ))
+              EXPOSED_MS=${CLEAN_MS}
+              ;;
+            overlap)
+              CLEAN_T0=$(ms)
+              ( ./scripts/tools/free_up_disk_space.sh > /tmp/clean.log 2>&1; ms > /tmp/clean.end ) &
+              CLEAN_PID=$!
+              ;;
+            skip)
+              echo "no cleanup" > /tmp/clean.log
+              ;;
+          esac
+
+          PULL_T0=$(ms)
+          docker pull "${IMAGE}"
+          PULL_MS=$(( $(ms) - PULL_T0 ))
+
+          if [[ "${ARM}" == "overlap" ]]; then
+            WAIT_T0=$(ms)
+            wait "${CLEAN_PID}"
+            EXPOSED_MS=$(( $(ms) - WAIT_T0 ))
+            CLEAN_MS=$(( $(cat /tmp/clean.end) - CLEAN_T0 ))
+          fi
+
+          TOTAL_MS=$(( $(ms) - START ))
+          AFTER=$(avail)
+          kill "${SAMPLER}" 2>/dev/null || true
+          LOW=$(sort -n /tmp/avail.log | head -1)
+
+          echo "RESULT arm=${ARM} rep=${REP}" \
+               "total_s=$(secs ${TOTAL_MS})" \
+               "pull_s=$(secs ${PULL_MS})" \
+               "clean_s=$(secs ${CLEAN_MS})" \
+               "clean_exposed_s=$(secs ${EXPOSED_MS})" \
+               "avail_before_gb=$(gb ${BEFORE})" \
+               "avail_low_gb=$(gb ${LOW})" \
+               "avail_after_gb=$(gb ${AFTER})" \
+               "consumed_gb=$(gb $(( BEFORE - LOW )))" | tee -a "${GITHUB_STEP_SUMMARY}"
