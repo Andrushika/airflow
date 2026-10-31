@@ -741,11 +741,8 @@ query($q: String!, $cursor: String) {
 }
 """
 
-PASS_TWO_QUERY = """
-query($q: String!, $cursor: String) {
-  search(type: ISSUE, first: %(page)d, after: $cursor, query: $q) {
-    pageInfo { hasNextPage endCursor }
-    nodes { ... on PullRequest {
+PULL_REQUEST_FRAGMENT = """
+fragment PassTwoFields on PullRequest {
       number id isDraft createdAt authorAssociation baseRefName headRefName headRefOid
       author { login }
       headRepository { nameWithOwner }
@@ -773,10 +770,29 @@ query($q: String!, $cursor: String) {
         pageInfo { hasNextPage endCursor }
         nodes { databaseId body author { login } }
       }
-    } }
+}
+"""
+
+PASS_TWO_QUERY = (
+    """
+query($q: String!, $cursor: String) {
+  search(type: ISSUE, first: %(page)d, after: $cursor, query: $q) {
+    pageInfo { hasNextPage endCursor }
+    nodes { ...PassTwoFields }
   }
 }
 """
+    + PULL_REQUEST_FRAGMENT
+)
+
+PULL_REQUEST_QUERY = (
+    """
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { ...PassTwoFields } }
+}
+"""
+    + PULL_REQUEST_FRAGMENT
+)
 
 
 def _labels(node: dict[str, Any]) -> tuple[str, ...]:
@@ -1850,17 +1866,30 @@ def run_reconcile(
     draft_changes: list[DraftChange] = []
     configs = BaseGateConfigs(client, repo=repo, default_branch=default_branch, default_config=config)
 
-    discover(client, configs, repo=repo, now=now, unknown=unknown)
+    labelled = discover(client, configs, repo=repo, now=now, unknown=unknown)
 
+    fields = {"page": PASS_TWO_PAGE_SIZE, "context": STATUS_CONTEXT, "ci_passed": CI_PASSED_CONTEXT}
     prs = [
         parse_pull_request(node)
         for node in _search(
-            client,
-            PASS_TWO_QUERY
-            % {"page": PASS_TWO_PAGE_SIZE, "context": STATUS_CONTEXT, "ci_passed": CI_PASSED_CONTEXT},
-            f'repo:{repo} is:pr is:open label:"{LABEL_FORK_CI_REQUIRED}"',
+            client, PASS_TWO_QUERY % fields, f'repo:{repo} is:pr is:open label:"{LABEL_FORK_CI_REQUIRED}"'
         )
     ]
+    # Search lags behind a label added seconds earlier, so the pull requests labelled above are read
+    # directly; otherwise they would wait for the next run.
+    found_by_search = {pr.number for pr in prs}
+    owner, name = repo.split("/", 1)
+    for number in labelled:
+        if number in found_by_search:
+            continue
+        try:
+            node = client.graphql(
+                PULL_REQUEST_QUERY % fields, {"owner": owner, "name": name, "number": number}
+            )["repository"]["pullRequest"]
+        except GitHubError as e:
+            console_print(f"[info]#{number}: reading it failed ({e}); reconciled on the next run[/]")
+            continue
+        prs.append(parse_pull_request(node))
     observations = fetch_fork_observations(client, prs)
 
     def is_gated_base(base_ref: str) -> bool:

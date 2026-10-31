@@ -470,7 +470,9 @@ state targetUrl description } } } } }`), and the reconciler's own state comment
 (`comments(first: 100)`, the earliest comment by `github-actions` with the marker, paging
 through the remaining comments of the rare pull request with more). The reconciler creates that
 comment on first contact and only edits it afterwards, so a marker posted by anyone else, or
-echoed later by another workflow, is ignored. The fork state is then fetched in batches of 50 with one GraphQL
+echoed later by another workflow, is ignored. The search does not list a label added seconds
+earlier yet, so a pull request that pass 1 has just labelled is read directly by number, with the
+same fields, and reconciled in the same run. The fork state is then fetched in batches of 50 with one GraphQL
 query per batch using aliases. Owner and name come from the pull request's
 `headRepository { nameWithOwner }`, never a fixed `airflow`, because a fork can be renamed or
 created as `airflow-1` on a name collision:

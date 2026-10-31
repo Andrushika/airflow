@@ -1713,6 +1713,52 @@ def test_run_reconcile_deletes_gated_runs(mock_classify, client, tmp_path, state
     assert client.delete_run.call_args_list == ([mock.call(1, 7)] if deletes else [])
 
 
+@pytest.mark.parametrize(
+    ("listed_by_search", "direct_read", "reconciled"),
+    [
+        pytest.param(False, {"repository": {"pullRequest": _pr_node(1)}}, [1], id="search-lags"),
+        pytest.param(True, None, [1], id="search-lists-it"),
+        pytest.param(False, GitHubError("gh api failed: HTTP 502"), [], id="read-fails"),
+    ],
+)
+@mock.patch("airflow_breeze.utils.fork_ci_reconcile.classify", autospec=True)
+def test_run_reconcile_reconciles_pull_requests_labelled_in_the_same_run(
+    mock_classify, client, tmp_path, listed_by_search, direct_read, reconciled
+):
+    mock_classify.return_value = Plan(state=ForkState.AWAITING_PUSH)
+    newly_gated = {**_pr_node(1), "labels": {"nodes": []}}
+    responses = [
+        _search_result(newly_gated),
+        _search_result(),
+        _search_result(_pr_node(1)) if listed_by_search else _search_result(),
+    ]
+    if direct_read is not None:
+        responses.append(direct_read)
+    client.graphql.side_effect = [*responses, {"pr0": {"object": None}}]
+    client.rest_get_pages.return_value = [{"total_count": 0, "workflow_runs": []}]
+
+    def rest_get(path, paginate=False, items_key=None):
+        if path.endswith("/actions/workflows/ci-amd.yml"):
+            return {"state": "active"}
+        raise AssertionError(path)
+
+    client.rest_get.side_effect = rest_get
+
+    run_reconcile(
+        client,
+        CONFIG,
+        now=NOW,
+        run_url="https://run",
+        output_file=tmp_path / "s.json",
+        workflows_dir=tmp_path,
+    )
+
+    client.add_labels.assert_called_once_with(1, ["fork ci required"])
+    assert [call.args[0].number for call in mock_classify.call_args_list] == reconciled
+    direct_reads = [call for call in client.graphql.call_args_list if call.args[1].get("number") == 1]
+    assert len(direct_reads) == (0 if listed_by_search else 1)
+
+
 @mock.patch("airflow_breeze.utils.fork_ci_reconcile.run_reconcile", autospec=True, return_value=True)
 def test_command_writes_has_alerts_output(mock_run, tmp_path, monkeypatch):
     github_output = tmp_path / "github_output"
