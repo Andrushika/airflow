@@ -86,6 +86,9 @@ github:
     creation_cap:
       enabled: true
       max_open_pull_requests: 5
+      bypass_users:
+        - Andrushika
+        - Dev-iL
 
   # Legacy branch protection is being migrated to Rulesets below.
   #
