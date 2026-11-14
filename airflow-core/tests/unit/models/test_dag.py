@@ -231,6 +231,21 @@ class TestDag:
 
         mock_ensure_initialized.assert_called_once_with()
 
+    @mock.patch("airflow.cli.cli_parser.get_parser", autospec=True)
+    @mock.patch("airflow.settings.ensure_initialized", autospec=True)
+    def test_dag_cli_initializes_settings_before_running_the_command(
+        self, mock_ensure_initialized, mock_get_parser
+    ):
+        calls = mock.Mock()
+        calls.attach_mock(mock_ensure_initialized, "ensure_initialized")
+        args = mock_get_parser.return_value.parse_args.return_value
+        calls.attach_mock(args.func, "func")
+        dag = DAG(dag_id="test_dag_cli_initializes", schedule=None, start_date=DEFAULT_DATE)
+
+        dag.cli()
+
+        assert calls.mock_calls == [mock.call.ensure_initialized(), mock.call.func(args, dag)]
+
     @conf_vars({("core", "load_examples"): "false"})
     def test_dag_test_auto_parses_when_not_serialized(self, test_dags_bundle, session):
         """

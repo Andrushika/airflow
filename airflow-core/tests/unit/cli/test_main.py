@@ -16,6 +16,9 @@
 # under the License.
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from unittest import mock
 
 from airflow import __main__ as airflow_main
@@ -38,3 +41,15 @@ def test_main_initializes_before_running_the_command(
     airflow_main.main()
 
     assert calls.mock_calls == [mock.call.ensure_initialized(), mock.call.redirect(), mock.call.func(args)]
+
+
+def test_command_runs_when_importing_airflow_does_not_initialize():
+    result = subprocess.run(
+        [sys.executable, "-m", "airflow", "plugins"],
+        env={**os.environ, "_AIRFLOW__AS_LIBRARY": "1"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
