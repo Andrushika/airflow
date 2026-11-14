@@ -63,8 +63,8 @@ skip_non_fork_mp_start = pytest.mark.skipif(
 class TestRunWorker:
     @mock.patch("signal.signal", autospec=True)
     @mock.patch("airflow.executors.local_executor.setproctitle", autospec=True)
-    @mock.patch("airflow.executors.local_executor.settings.ensure_initialized", autospec=True)
-    def test_initializes_without_orm(self, mock_ensure_initialized, mock_setproctitle, mock_signal):
+    @mock.patch("airflow.settings.ensure_initialized", autospec=True)
+    def test_initializes_airflow(self, mock_ensure_initialized, mock_setproctitle, mock_signal):
         ctx = multiprocessing.get_context()
         input_queue = ctx.SimpleQueue()
         input_queue.put(None)
@@ -77,7 +77,7 @@ class TestRunWorker:
             team_conf=ExecutorConf(team_name=None),
         )
 
-        mock_ensure_initialized.assert_called_once_with(orm=False)
+        mock_ensure_initialized.assert_called_once_with()
 
 
 class TestLocalExecutorMpStartMethod:

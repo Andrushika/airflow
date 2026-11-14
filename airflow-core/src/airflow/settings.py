@@ -884,22 +884,11 @@ def import_local_settings():
 
 
 _initialized = False
-_initialized_without_orm = False
 
 
-def _is_database_isolated_process() -> bool:
-    """Whether this is a process that never gets a metadata database engine."""
-    is_worker = os.environ.get("_AIRFLOW__REEXECUTED_PROCESS") == "1"
-    return bool(os.environ.get("PYTHON_OPERATORS_VIRTUAL_ENV_MODE", None)) or is_worker
-
-
-def initialize(*, orm: bool = True):
-    """
-    Initialize Airflow with all the settings from this file.
-
-    :param orm: Whether to configure the metadata database engine.
-    """
-    global _initialized, _initialized_without_orm
+def initialize():
+    """Initialize Airflow with all the settings from this file."""
+    global _initialized
     configure_vars()
     prepare_syspath_for_config_and_plugins()
     policy_mgr = get_policy_plugin_manager()
@@ -915,9 +904,9 @@ def initialize(*, orm: bool = True):
     # Configure secrets masker before masking secrets
     _configure_secrets_masker()
 
-    if not _is_database_isolated_process():
-        if orm:
-            configure_orm()
+    is_worker = os.environ.get("_AIRFLOW__REEXECUTED_PROCESS") == "1"
+    if not os.environ.get("PYTHON_OPERATORS_VIRTUAL_ENV_MODE", None) and not is_worker:
+        configure_orm()
 
         # mask the sensitive_config_values
         conf.mask_secrets()
@@ -929,30 +918,16 @@ def initialize(*, orm: bool = True):
     # Ensure we close DB connections at scheduler and gunicorn worker terminations
     atexit.register(dispose_orm)
     _initialized = True
-    _initialized_without_orm = not orm
 
 
-def ensure_initialized(*, orm: bool = True) -> None:
+def ensure_initialized() -> None:
     """
     Initialize Airflow unless this process already did.
 
-    Entry points call this before they use settings, logging or the metadata database, so they
-    do not depend on ``import airflow`` having initialized them.
-
-    ``orm=False`` only means that this call does not configure the metadata database engine. A
-    later call that needs the engine configures it then. A forked child inherits its parent's
-    engine and a spawned one starts without it, so failing on that later call would make the
-    result depend on the multiprocessing start method.
-
-    :param orm: Whether to configure the metadata database engine.
+    Entry points call this instead of relying on ``import airflow`` to initialize them.
     """
-    global _initialized_without_orm
     if not _initialized:
-        initialize(orm=orm)
-    elif orm and _initialized_without_orm:
-        if not _is_database_isolated_process():
-            configure_orm()
-        _initialized_without_orm = False
+        initialize()
 
 
 # By default Airflow plugins are lazily-loaded (only loaded when required). Set it to False,

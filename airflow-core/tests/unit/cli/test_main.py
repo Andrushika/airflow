@@ -22,7 +22,7 @@ from airflow import __main__ as airflow_main
 
 
 @mock.patch("airflow.__main__.redirect_stdout_log_handlers_to_stderr", autospec=True)
-@mock.patch("airflow.__main__.settings.ensure_initialized", autospec=True)
+@mock.patch("airflow.settings.ensure_initialized", autospec=True)
 @mock.patch("airflow.__main__.argcomplete.autocomplete", autospec=True)
 @mock.patch("airflow.__main__.cli_parser.get_parser", autospec=True)
 def test_main_initializes_before_running_the_command(

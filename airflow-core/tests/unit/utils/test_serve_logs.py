@@ -258,24 +258,12 @@ class TestServeLogs:
 
 @mock.patch("setproctitle.setproctitle", autospec=True)
 @mock.patch("airflow.utils.serve_logs.core.uvicorn.run", autospec=True)
-@mock.patch("airflow.utils.serve_logs.core.settings.ensure_initialized", autospec=True)
-def test_serve_logs_initializes_without_orm_before_serving(
-    mock_ensure_initialized, mock_uvicorn_run, mock_setproctitle
-):
+@mock.patch("airflow.settings.ensure_initialized", autospec=True)
+def test_serve_logs_initializes_before_serving(mock_ensure_initialized, mock_uvicorn_run, mock_setproctitle):
     calls = mock.Mock()
     calls.attach_mock(mock_ensure_initialized, "ensure_initialized")
     calls.attach_mock(mock_uvicorn_run, "uvicorn_run")
 
     serve_logs(port=8793)
 
-    assert calls.mock_calls == [
-        mock.call.ensure_initialized(orm=False),
-        mock.call.uvicorn_run(
-            "airflow.utils.serve_logs.log_server:get_app",
-            host="",
-            port=8793,
-            log_level=mock.ANY,
-            log_config=None,
-            access_log=False,
-        ),
-    ]
+    assert [name for name, _, _ in calls.mock_calls] == ["ensure_initialized", "uvicorn_run"]

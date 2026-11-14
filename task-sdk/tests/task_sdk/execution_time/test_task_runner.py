@@ -2329,8 +2329,7 @@ def test_task_run_with_user_impersonation(
         assert "python" in actual_cmd[5]
         assert actual_cmd[6] == "-c"
         assert actual_cmd[7] == (
-            "from airflow.sdk.execution_time.supervisor import _initialize_core_settings; "
-            "_initialize_core_settings(); "
+            "from airflow import settings; settings.ensure_initialized(); "
             "from airflow.sdk.execution_time.task_runner import main; main()"
         )
 

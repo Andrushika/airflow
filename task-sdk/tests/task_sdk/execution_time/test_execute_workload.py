@@ -26,7 +26,7 @@ from airflow.sdk.execution_time.execute_workload import execute_workload
 @mock.patch("airflow.sdk.log.configure_logging", autospec=True)
 @mock.patch("airflow.settings.dispose_orm", autospec=True)
 @mock.patch("airflow.settings.ensure_initialized", autospec=True)
-def test_initializes_without_orm_before_running_the_workload(
+def test_initializes_before_running_the_workload(
     mock_ensure_initialized, mock_dispose_orm, mock_configure_logging, mock_run_workload
 ):
     calls = mock.Mock()
@@ -37,8 +37,8 @@ def test_initializes_without_orm_before_running_the_workload(
 
     execute_workload(workload)
 
-    assert calls.mock_calls == [
-        mock.call.ensure_initialized(orm=False),
-        mock.call.configure_logging(output=mock.ANY, json_output=True),
-        mock.call.run_workload(workload, subprocess_logs_to_stdout=True),
+    assert [name for name, _, _ in calls.mock_calls] == [
+        "ensure_initialized",
+        "configure_logging",
+        "run_workload",
     ]

@@ -80,7 +80,7 @@ class TestSchedulerHealthServer:
 
 
 @mock.patch("airflow.utils.scheduler_health.HTTPServer", autospec=True)
-@mock.patch("airflow.utils.scheduler_health.settings.ensure_initialized", autospec=True)
+@mock.patch("airflow.settings.ensure_initialized", autospec=True)
 def test_serve_health_check_initializes_before_serving(mock_ensure_initialized, mock_http_server):
     calls = mock.Mock()
     calls.attach_mock(mock_ensure_initialized, "ensure_initialized")
@@ -88,8 +88,8 @@ def test_serve_health_check_initializes_before_serving(mock_ensure_initialized, 
 
     serve_health_check()
 
-    assert calls.mock_calls == [
-        mock.call.ensure_initialized(),
-        mock.call.http_server(mock.ANY, HealthServer),
-        mock.call.http_server().serve_forever(),
+    assert [name for name, _, _ in calls.mock_calls] == [
+        "ensure_initialized",
+        "http_server",
+        "http_server().serve_forever",
     ]

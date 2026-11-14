@@ -44,7 +44,7 @@ def execute_workload(workload: ExecuteTask) -> None:
     from airflow.sdk.log import configure_logging
     from airflow.settings import dispose_orm, ensure_initialized
 
-    ensure_initialized(orm=False)
+    ensure_initialized()
     dispose_orm(do_log=False)
 
     configure_logging(output=sys.stdout.buffer, json_output=True)
