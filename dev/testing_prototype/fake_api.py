@@ -94,6 +94,7 @@ class InMemoryExecutionAPI:
             ("GET", re.compile(rf"{ti}/validate-inlets-and-outlets"), self._validate_assets),
             ("GET", re.compile(r"task-reschedules/[^/]+/start_date"), self._reschedule_start),
             ("GET", re.compile(rf"{xcom}/slice"), self._xcom_slice),
+            ("GET", re.compile(rf"{xcom}/item/(-?\d+)"), self._xcom_item),
             ("GET", re.compile(xcom), self._xcom_get),
             ("HEAD", re.compile(xcom), self._xcom_head),
             ("POST", re.compile(xcom), self._xcom_set),
@@ -179,6 +180,17 @@ class InMemoryExecutionAPI:
         found = sorted((key[4], value) for key, value in self.xcoms.items() if key[:4] == prefix)
         return httpx2.Response(200, json=[value for _, value in found])
 
+    def _xcom_item(self, match: re.Match[str], request: httpx2.Request) -> httpx2.Response:
+        prefix = (match.group(1), match.group(2), match.group(3), match.group(4))
+        mapped = sorted(
+            (key[4], value) for key, value in self.xcoms.items() if key[:4] == prefix and key[4] >= 0
+        )
+        values = [value for _, value in mapped] if mapped else self.xcoms.get((*prefix, -1))
+        try:
+            return httpx2.Response(200, json=values[int(match.group(5))])  # type: ignore[index]
+        except (IndexError, TypeError):
+            return httpx2.Response(404, json=_NOT_FOUND)
+
     def _xcom_get(self, match: re.Match[str], request: httpx2.Request) -> httpx2.Response:
         key = self._xcom_key(match, request)
         if key in self.xcoms:
@@ -210,7 +222,8 @@ class InMemoryExecutionAPI:
         return httpx2.Response(404, json=_NOT_FOUND)
 
     def _variable_put(self, match: re.Match[str], request: httpx2.Request) -> httpx2.Response:
-        self.variables[match.group(1)] = json.loads(request.content)["value"]
+        body = json.loads(request.content)
+        self.variables[match.group(1)] = body["val"] if "val" in body else body["value"]
         return httpx2.Response(201, json={"message": "ok"})
 
     def _store_get(self, match: re.Match[str], request: httpx2.Request) -> httpx2.Response:
