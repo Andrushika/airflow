@@ -57,6 +57,27 @@ needed. Here are some examples of arguments:
   executor, it just runs all the tasks locally.
   By providing this argument, the Dag is executed using the executor configured in the Airflow environment.
 
+Finding out why a task failed
+-----------------------------
+
+``dag.test()`` returns the Dag run. When a task raises an exception, the run's ``task_errors`` maps the
+task instance key (Dag id, task id, run id, try number and map index) to that exception, one entry per
+failed attempt. Put it in the assertion message, so a failing test shows the exception without searching the
+task logs:
+
+.. code-block:: python
+
+  from my_dag_file import dag
+
+
+  def test_my_dag():
+      run = dag.test()
+      assert run.state == "success", run.task_errors
+
+Only exceptions raised by the tasks themselves are collected. Errors raised outside a task, such as by an
+inline trigger, are still only in the logs. ``task_errors`` stays empty when ``use_executor`` is set,
+because the tasks then run in other processes.
+
 Conditionally skipping tasks
 ----------------------------
 

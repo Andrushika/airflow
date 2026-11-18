@@ -71,6 +71,7 @@ if TYPE_CHECKING:
     from typing_extensions import TypeIs
 
     from airflow.models.taskinstance import TaskInstance as SchedulerTaskInstance
+    from airflow.models.taskinstancekey import TaskInstanceKey
     from airflow.sdk.api.datamodels._generated import DagRunType
     from airflow.sdk.definitions.decorators import TaskDecoratorCollection
     from airflow.sdk.definitions.edges import EdgeInfoType
@@ -1274,6 +1275,10 @@ class DAG:
         :param variable_file_path: file path to a variable file in either yaml or json
         :param use_executor: if set, uses an executor to test the Dag
         :param mark_success_pattern: regex of task_ids to mark as success instead of running
+        :return: the Dag run. Its ``task_errors`` maps the key of each failed task attempt to the
+            exception the task raised. Errors raised outside the task, such as by an inline trigger,
+            are not included. It stays empty when ``use_executor`` is set, because the tasks then run
+            in other processes.
         """
         import re
         import time
@@ -1413,6 +1418,8 @@ class DAG:
                 triggered_by=DagRunTriggeredByType.TEST,
                 triggering_user_name="dag_test",
             )
+            task_errors: dict[TaskInstanceKey, BaseException] = {}
+            dr.task_errors = task_errors
 
             log.debug("starting dagrun")
             # Instead of starting a scheduler, we run the minimal loop possible to check
@@ -1501,7 +1508,9 @@ class DAG:
                                 ti.set_state(TaskInstanceState.SUCCESS)
                                 log.info("[DAG TEST] Marking success for %s on %s", task, ti.logical_date)
                             else:
-                                _run_task(ti=ti, task=task, run_triggerer=True)
+                                result = _run_task(ti=ti, task=task, run_triggerer=True)
+                                if result is not None and result.error is not None:
+                                    task_errors[ti.key] = result.error
                         except Exception:
                             log.exception("Task failed; ti=%s", ti)
                 if use_executor:

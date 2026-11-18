@@ -135,6 +135,7 @@ if TYPE_CHECKING:
     )
     from airflow.models.dag_version import DagVersion
     from airflow.models.task_coordinates import SchedulingTI
+    from airflow.models.taskinstancekey import TaskInstanceKey
     from airflow.sdk import DAG as SDKDAG
     from airflow.serialization.definitions.dag import SerializedDAG
     from airflow.serialization.definitions.mappedoperator import Operator
@@ -487,6 +488,8 @@ class DagRun(Base, LoggingMixin):
     # Can be set by manual prefetch, such as attach_dag_versions_to_runs()
     # as an alternative to traversing all current and historical attempts. Maps version_id -> DagVersion.
     _prefetched_dag_version_ids: dict[UUID, DagVersion] | None = None
+
+    task_errors: dict[TaskInstanceKey, BaseException] | None = None
 
     def __init__(
         self,

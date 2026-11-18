@@ -2038,6 +2038,31 @@ class TestDag:
         mock_task_object_1.assert_called()
         mock_task_object_2.assert_not_called()
 
+    def test_dag_test_collects_task_errors(self, testing_dag_bundle):
+        dag = DAG(dag_id="test_dag_test_task_errors", schedule=None, start_date=DEFAULT_DATE)
+
+        @task_decorator(retries=1, retry_delay=timedelta(0))
+        def fail_task():
+            raise KeyError("user_id")
+
+        @task_decorator
+        def ok_task():
+            pass
+
+        with dag:
+            fail_task()
+            ok_task()
+        sync_dag_to_db(dag)
+
+        dr = dag.test()
+
+        assert {
+            (key.task_id, key.try_number): (type(error), error.args) for key, error in dr.task_errors.items()
+        } == {
+            ("fail_task", 1): (KeyError, ("user_id",)),
+            ("fail_task", 2): (KeyError, ("user_id",)),
+        }
+
     @staticmethod
     def _make_awaiting_input_dag(dag_id, resume_calls):
         """Build a Dag whose single task parks in AWAITING_INPUT (Human-in-the-loop)."""
