@@ -256,6 +256,7 @@ exclude = [
 "../shared/plugins_manager/src/airflow_shared/plugins_manager" = "src/airflow/_shared/plugins_manager"
 "../shared/providers_discovery/src/airflow_shared/providers_discovery" = "src/airflow/_shared/providers_discovery"
 "../shared/template_rendering/src/airflow_shared/template_rendering" = "src/airflow/_shared/template_rendering"
+"../shared/trigger_rules/src/airflow_shared/trigger_rules" = "src/airflow/_shared/trigger_rules"
 
 [tool.hatch.build.targets.custom]
 path = "./hatch_build.py"
@@ -342,6 +343,7 @@ shared_distributions = [
     "apache-airflow-shared-timezones",
     "apache-airflow-shared-plugins-manager",
     "apache-airflow-shared-providers-discovery",
+    "apache-airflow-shared-trigger-rules",
 ]
 
 [tool.ruff]

@@ -152,6 +152,7 @@ path = "src/airflow/sdk/__init__.py"
 "../shared/providers_discovery/src/airflow_shared/providers_discovery" = "src/airflow/sdk/_shared/providers_discovery"
 "../shared/state/src/airflow_shared/state" = "src/airflow/sdk/_shared/state"
 "../shared/template_rendering/src/airflow_shared/template_rendering" = "src/airflow/sdk/_shared/template_rendering"
+"../shared/trigger_rules/src/airflow_shared/trigger_rules" = "src/airflow/sdk/_shared/trigger_rules"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/airflow"]
@@ -331,4 +332,5 @@ shared_distributions = [
     "apache-airflow-shared-observability",
     "apache-airflow-shared-plugins-manager",
     "apache-airflow-shared-providers-discovery",
+    "apache-airflow-shared-trigger-rules",
 ]
