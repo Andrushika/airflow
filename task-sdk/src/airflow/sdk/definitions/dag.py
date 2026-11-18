@@ -1276,9 +1276,9 @@ class DAG:
         :param use_executor: if set, uses an executor to test the Dag
         :param mark_success_pattern: regex of task_ids to mark as success instead of running
         :return: the Dag run. Its ``task_errors`` maps the key of each failed task attempt to the
-            exception the task raised. Errors raised outside the task, such as by an inline trigger,
-            are not included. It stays empty when ``use_executor`` is set, because the tasks then run
-            in other processes.
+            exception raised while the task ran. Errors raised outside the task run, such as by an
+            inline trigger, are not included. It stays empty when ``use_executor`` is set, because the
+            tasks then run in other processes.
         """
         import re
         import time

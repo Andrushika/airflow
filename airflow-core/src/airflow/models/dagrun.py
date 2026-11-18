@@ -489,6 +489,7 @@ class DagRun(Base, LoggingMixin):
     # as an alternative to traversing all current and historical attempts. Maps version_id -> DagVersion.
     _prefetched_dag_version_ids: dict[UUID, DagVersion] | None = None
 
+    # Set only by DAG.test(): the exception of each failed task attempt. None on other runs.
     task_errors: dict[TaskInstanceKey, BaseException] | None = None
 
     def __init__(

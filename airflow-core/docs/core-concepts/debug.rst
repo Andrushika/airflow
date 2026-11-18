@@ -74,8 +74,8 @@ task logs:
       run = dag.test()
       assert run.state == "success", run.task_errors
 
-Only exceptions raised by the tasks themselves are collected. Errors raised outside a task, such as by an
-inline trigger, are still only in the logs. ``task_errors`` stays empty when ``use_executor`` is set,
+Only exceptions raised while a task runs are collected. Errors raised outside the task run, such as by an
+inline trigger, are only in the logs. ``task_errors`` stays empty when ``use_executor`` is set,
 because the tasks then run in other processes.
 
 Conditionally skipping tasks
