@@ -77,6 +77,7 @@ def test_airflow_sdk_no_unexpected_exports():
         "timezone",
         "types",
         "state",
+        "testing",
         "yaml",
     }
     unexpected = actual - public - ignore
