@@ -334,6 +334,31 @@ See :doc:`apache-airflow:authoring-and-scheduling/language-sdks/index` for a con
 
 .. autoapiclass:: airflow.sdk.coordinators.node.NodeCoordinator
 
+Testing Tasks
+-------------
+
+|experimental|
+
+``run_task`` runs one task instance through the real Task SDK runner, so templates, XComs,
+Variables, Connections and the task's end state behave as in a Dag run. It needs no metadata
+database, scheduler or API server: the upstream values and run details you pass in are served
+from memory. It does not run upstream or downstream tasks.
+
+.. code-block:: python
+
+    from airflow.sdk import TaskInstanceState
+    from airflow.sdk.testing import run_task
+
+
+    def test_total():
+        result = run_task(dag.get_task("total"), upstream={"extract": [1, 2, 3]})
+        assert result.state == TaskInstanceState.SUCCESS
+        assert result.return_value == 6
+
+.. autoapifunction:: airflow.sdk.testing.run_task
+
+.. autoapiclass:: airflow.sdk.testing.TaskRunResult
+
 Dag Importers
 -------------
 
